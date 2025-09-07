@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__dagger__list_methods",
+      "mcp__dagger__select_methods",
+      "mcp__dagger__call_method",
+      "Bash(go build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
