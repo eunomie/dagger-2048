@@ -5,35 +5,58 @@ import (
 	"fmt"
 	"strings"
 
-	"dagger/dagger-2048/internal/dagger"
+	"dagger/dagger/internal/dagger"
+
 	"github.com/containerd/platforms"
 )
 
-type Dagger2048 struct {
+type Dagger struct {
 	// The source code directory
-	Src      *dagger.Directory
+	// +private
+	Src *dagger.Directory
+	// +private
 	Platform *dagger.Platform
+	// +private
+	GoVersion string
+	// +private
+	AlpineVersion string
 }
 
 // Creates a new Dagger2048 Dagger module instance
 func New(
-// Source directory of the application
+	ctx context.Context,
+// Source directory of the application.
 // +optional
 // +defaultPath="/"
 	src *dagger.Directory,
 // +optional
 	platform *dagger.Platform,
-) *Dagger2048 {
-	return &Dagger2048{
-		Src:      src,
-		Platform: platform,
+// Go version to build the game.
+// You can define it in a `.env` file
+	goVersion string,
+// Alpine version.
+// You can define it in a `.env` file
+	alpineVersion string,
+) (*Dagger, error) {
+	if platform == nil {
+		if p, err := dag.DefaultPlatform(ctx); err != nil {
+			return nil, err
+		} else {
+			platform = &p
+		}
 	}
+	return &Dagger{
+		Src:           src,
+		Platform:      platform,
+		GoVersion:     goVersion,
+		AlpineVersion: alpineVersion,
+	}, nil
 }
 
 // Build environment with Go tools and dependencies
-func (m *Dagger2048) BuildEnv() *dagger.Container {
+func (m *Dagger) BuildEnv() *dagger.Container {
 	return dag.Container().
-		From("golang:1.25-alpine3.22").
+		From(fmt.Sprintf("golang:%s-alpine%s", m.GoVersion, m.AlpineVersion)).
 		WithWorkdir("/app").
 		With(func(c *dagger.Container) *dagger.Container {
 			if m.Platform == nil {
@@ -70,7 +93,7 @@ func (m *Dagger2048) BuildEnv() *dagger.Container {
 }
 
 // Build Go application
-func (m *Dagger2048) Build() *dagger.Container {
+func (m *Dagger) Build() *dagger.Container {
 	return m.BuildEnv().
 		WithExec([]string{"go", "build", "-ldflags", "-s -w", "-o", "dagger2048", "./main.go"})
 }
@@ -84,12 +107,12 @@ func (m *Dagger2048) Build() *dagger.Container {
 // Then you can run
 //
 //	./dagger2048
-func (m *Dagger2048) Binary() *dagger.File {
+func (m *Dagger) Binary() *dagger.File {
 	return m.Build().File("dagger2048")
 }
 
 // Run Go tests
-func (m *Dagger2048) Test(ctx context.Context) (string, error) {
+func (m *Dagger) Test(ctx context.Context) (string, error) {
 	ctr := m.BuildEnv().
 		WithExec([]string{"go", "test", "./..."}, dagger.ContainerWithExecOpts{Expect: dagger.ReturnTypeAny})
 	out, err := ctr.CombinedOutput(ctx)
@@ -105,16 +128,16 @@ func (m *Dagger2048) Test(ctx context.Context) (string, error) {
 }
 
 // Create runnable docker image
-func (m *Dagger2048) Image() *dagger.Container {
+func (m *Dagger) Image() *dagger.Container {
 	return dag.Container().
-		From("alpine:3.22").
+		From(fmt.Sprintf("alpine:%s", m.AlpineVersion)).
 		WithWorkdir("/app").
 		WithFile("/app/dagger2048", m.Build().File("/app/dagger2048")).
 		WithDefaultArgs([]string{"/app/dagger2048"})
 }
 
 // Run the binary inside a container
-func (m *Dagger2048) Run() *dagger.Container {
+func (m *Dagger) Run() *dagger.Container {
 	return m.Image().Terminal(dagger.ContainerTerminalOpts{
 		Cmd: []string{"/app/dagger2048"},
 	})
